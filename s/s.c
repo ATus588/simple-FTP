@@ -417,7 +417,7 @@ void recvFile(int sock_data, char* filename) {
 //     }
 
 //     fclose(fd);
-// }
+}
 
 /** 
  * Child process handles connection to client
