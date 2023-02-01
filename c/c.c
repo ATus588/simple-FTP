@@ -382,26 +382,44 @@ int ftclient_get(int data_sock, int sock_control, char* arg){
 }
 
 void upload(int data_sock, char* filename) {
-	// size_t num_read;
 
-	// FILE* fp = fopen(filename, "r");
-	// if(!fp) {
-	// 	printf("Can't open file");
-	// }else {
-	// 	fseek(fp, 0, SEEK_END);
-	// 	int fsize = ftell(fp);
-	// 	char* data = (char *)calloc(fsize, 1);
-	// 	fread(data, 1, fsize, fp);
-	// 	int sent = 0;
-	// 	while (sent < fsize) {
-	// 		int s = send(data_sock, data + sent, fsize - sent, 0);
-	// 	}
-
+	FILE* fd = NULL;
+	char data[MAX_SIZE];
+	memset(data, 0, MAX_SIZE);
+	size_t num_read;
+	int stt;					
 		
-	// 	fclose(fp);
-	// 	free(data);
-	// 	data = NULL;
-	// }
+	fd = fopen(filename, "r");
+	
+	if (!fd) {	
+		// send error code (550 Requested action not taken)
+		printf("ko the mo file\n");
+		stt = 550;
+		send(data_sock, &stt, sizeof(stt), 0);
+
+	} else {	
+		// send okay (150 File status okay)
+		stt = 150;
+		send(data_sock, &stt, sizeof(stt), 0);
+	
+		do {
+			num_read = fread(data, 1, MAX_SIZE, fd);
+
+			if (num_read < 0) {
+				printf("error in fread()\n");
+			}
+
+			// send block
+			if (send(data_sock, data, num_read, 0) < 0)
+				perror("error sending file\n");
+
+		} while (num_read > 0);													
+			
+		// send message: 226: closing conn, file transfer successful
+
+		fclose(fd);
+	}
+
 }
 
 
@@ -515,12 +533,8 @@ int main(int argc, char const *argv[])
 				}
 				else if (strcmp(cmd.code, "STOR") == 0) {
 					printf("Uploading ...\n");
-					// close(data_sock);
 					upload(data_sock,cmd.arg);
-					printf("done");
-					if(read_reply() == 226) {
-						printf("Transfer Complete\n");
-					}
+					printf("xong\n");
 				}
 				close(data_sock);
 			}

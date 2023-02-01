@@ -403,20 +403,29 @@ void ftserve_retr(int sock_control, int sock_data, char* filename)
 	}
 }
 
-void recvFile(int sock_data, char* filename) {
-// 	char data[MAX_SIZE];
-//     FILE* fd = fopen(filename, "w");
-//     int size = recv(sock_data, data, MAX_SIZE, 0);
+int recvFile(int sock_data, char* filename) {
+    char data[MAX_SIZE];
+    int size, stt;
     
-//     while ( size > 0) {
-//         fwrite(data, 1, size, fd);
-//     }
+    recv(sock_data, &stt, sizeof(stt), 0);
+    printf("%d\n",stt);
+    if(stt == 550) {
+    	printf("can't open file\n");
+    	return -1;
+    }
+    if(stt == 150) {
+    	FILE* fd = fopen(filename, "w");
+    	while ((size = recv(sock_data, data, MAX_SIZE, 0)) > 0) {
+        	fwrite(data, 1, size, fd);
+	    }
 
-//     if (size < 0) {
-//         perror("error\n");
-//     }
+	    if (size < 0) {
+	        perror("error\n");
+	    }
 
-//     fclose(fd);
+	    fclose(fd);
+	    return 0;
+    }
 }
 
 /** 
@@ -465,12 +474,10 @@ void ftserve_process(int sock_control)
 				ftserve_retr(sock_control, sock_data, arg);
 			} else if (strcmp(cmd, "STOR") == 0) {		// RETRIEVE: get file
 				printf("Receving ...\n");
-				// close(sock_data);
 				recvFile(sock_data, arg);
-				printf("done");
-				send_response(sock_control,226);
-				// ftserve_retr(sock_control, sock_data, arg);
+				printf("xong r ma\n");
 			}
+			printf("dong data connect\n");
 			// Close data connection
 			close(sock_data);
 		} 
