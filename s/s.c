@@ -54,10 +54,13 @@ int socket_create()
 	sock_addr.sin_addr.s_addr = INADDR_ANY;
 
 	// bind
+	int flag = 1;
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag));
+
 	if (bind(sockfd, (struct sockaddr *) &sock_addr, sizeof(sock_addr)) < 0) {
 		close(sockfd);
 		perror("bind() error"); 
-		return -1; 
+		return -1;
 	}
    
 	// begin listening for incoming TCP requests
@@ -403,20 +406,21 @@ void ftserve_retr(int sock_control, int sock_data, char* filename)
 	}
 }
 
-int recvFile(int sock_data, char* filename) {
+int recvFile(int sock_control ,int sock_data, char* filename) {
     char data[MAX_SIZE];
-    int size, stt;
-    
-    recv(sock_data, &stt, sizeof(stt), 0);
-    printf("%d\n",stt);
-    if(stt == 550) {
-    	printf("can't open file\n");
+    int size, stt = 0;
+
+    recv(sock_control, &stt, sizeof(stt), 0);
+    // printf("%d\n", stt);
+    if( stt == 550) {
+    	printf("can't not open file!\n");
     	return -1;
-    }
-    if(stt == 150) {
-    	FILE* fd = fopen(filename, "w");
-    	while ((size = recv(sock_data, data, MAX_SIZE, 0)) > 0) {
-        	fwrite(data, 1, size, fd);
+    } else {
+
+	    FILE* fd = fopen(filename, "w");
+	    
+	    while ((size = recv(sock_data, data, MAX_SIZE, 0)) > 0) {
+	        fwrite(data, 1, size, fd);
 	    }
 
 	    if (size < 0) {
@@ -426,6 +430,7 @@ int recvFile(int sock_data, char* filename) {
 	    fclose(fd);
 	    return 0;
     }
+    return 0;
 }
 
 /** 
@@ -474,10 +479,10 @@ void ftserve_process(int sock_control)
 				ftserve_retr(sock_control, sock_data, arg);
 			} else if (strcmp(cmd, "STOR") == 0) {		// RETRIEVE: get file
 				printf("Receving ...\n");
-				recvFile(sock_data, arg);
+				recvFile(sock_control,sock_data, arg);
 				printf("xong r ma\n");
 			}
-			printf("dong data connect\n");
+			printf("dong data connection\n");
 			// Close data connection
 			close(sock_data);
 		} 

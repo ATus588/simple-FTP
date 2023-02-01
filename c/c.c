@@ -19,6 +19,7 @@
 #define INVALID_SOCKET -1
 #define INVALID_IP -1
 #define MAX_SIZE 1024
+
 #define PORT 9000
 #define DEFAULT_PORT 3000
 typedef struct sockaddr_in SOCKADDR_IN;
@@ -287,6 +288,8 @@ int socket_create(int port)
 	sock_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	// bind
+	int flag = 1;
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag));
 	if (bind(sockfd, (SOCKADDR *) &sock_addr, sizeof(sock_addr)) < 0) {
 		close(sockfd);
 		perror("bind() error"); 
@@ -395,12 +398,11 @@ void upload(int data_sock, char* filename) {
 		// send error code (550 Requested action not taken)
 		printf("ko the mo file\n");
 		stt = 550;
-		send(data_sock, &stt, sizeof(stt), 0);
-
+		send(sock_control, &stt, sizeof(stt), 0);
 	} else {	
 		// send okay (150 File status okay)
 		stt = 150;
-		send(data_sock, &stt, sizeof(stt), 0);
+		send(sock_control, &stt, sizeof(stt), 0);
 	
 		do {
 			num_read = fread(data, 1, MAX_SIZE, fd);
@@ -410,12 +412,9 @@ void upload(int data_sock, char* filename) {
 			}
 
 			// send block
-			if (send(data_sock, data, num_read, 0) < 0)
-				perror("error sending file\n");
+			send(data_sock, data, num_read, 0);
 
-		} while (num_read > 0);													
-			
-		// send message: 226: closing conn, file transfer successful
+		} while (num_read > 0);											
 
 		fclose(fd);
 	}
