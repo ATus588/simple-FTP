@@ -1,37 +1,4 @@
-#include <stdio.h>
-#include <dirent.h>
-#include <string.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <ctype.h>
-#include <time.h>
-
-#define INVALID_SOCKET -1
-#define INVALID_IP -1
-#define MAX_SIZE 1024
-
-#define PORT 9000
-#define DEFAULT_PORT 3000
-typedef struct sockaddr_in SOCKADDR_IN;
-typedef struct sockaddr SOCKADDR;
-typedef struct addrinfo ADDRINFO;
-
-int sock_control;
-
-struct command {
-	char arg[MAX_SIZE];
-	char code[5];
-};
+#include "FTP_Client.h"
 
 /*Validating IP Address*/
 int validate_ip(const char *ip){
@@ -93,7 +60,7 @@ void print_reply(int rc) {
  * Receive a response from server
  * Returns -1 on error, return code on success
  */
-int read_reply(){
+int read_reply(int sock_control){
 	int retcode = 0;
 	if (recv(sock_control, &retcode, sizeof(retcode), 0) < 0) {
 		perror("client: error reading message from server\n");
@@ -106,7 +73,7 @@ int read_reply(){
  * Input: cmd struct with an a code and an arg
  * Concats code + arg into a string and sends to server
  */
-int ftclient_send_cmd(struct command *cmd)
+int ftclient_send_cmd(struct command *cmd, int sock_control)
 {
 	char buffer[MAX_SIZE+5];
 	int rc;
@@ -143,7 +110,7 @@ void read_input(char* user_input, int size)
  * Get login details from user and
  * send to server for authentication
  */
-void ftclient_login()
+void ftclient_login(int sock_control)
 {
 	struct command cmd;
 	char user[MAX_SIZE];
@@ -157,7 +124,7 @@ void ftclient_login()
 	// Send USER command to server
 	strcpy(cmd.code, "USER");
 	strcpy(cmd.arg, user);
-	ftclient_send_cmd(&cmd);
+	ftclient_send_cmd(&cmd, sock_control);
 	
 	// Wait for go-ahead to send password
 	int wait;
@@ -170,10 +137,10 @@ void ftclient_login()
 	// Send PASS command to server
 	strcpy(cmd.code, "PASS");
 	strcpy(cmd.arg, pass);
-	ftclient_send_cmd(&cmd);
+	ftclient_send_cmd(&cmd, sock_control);
 	
 	// wait for response
-	int retcode = read_reply();
+	int retcode = read_reply(sock_control);
 	switch (retcode) {
 		case 430:
 			printf("430 Invalid username/password.\n");
@@ -384,7 +351,7 @@ int ftclient_get(int data_sock, int sock_control, char* arg){
     return 0;
 }
 
-void upload(int data_sock, char* filename) {
+void upload(int data_sock, char* filename, int sock_control) {
 
 	FILE* fd = NULL;
 	char data[MAX_SIZE];
@@ -419,129 +386,4 @@ void upload(int data_sock, char* filename) {
 		fclose(fd);
 	}
 
-}
-
-
-int main(int argc, char const *argv[])
-{
-	int data_sock, retcode;
-	char user_input[MAX_SIZE];
-	struct command cmd;	
-
-	if (argc != 2) {
-		printf("usage: ./ftclient ip-address\n");
-		exit(0);
-	}
-
-	int ip_valid = validate_ip(argv[1]);
-	if(ip_valid == INVALID_IP) {
-		printf("Error: Invalid ip-address\n");
-		exit(1);
-	}
-
-	sock_control = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	if(sock_control == INVALID_SOCKET) {
-		perror("Error");
-		exit(1);
-	}
-
-	SOCKADDR_IN servAddr;
-
-	servAddr.sin_family = AF_INET;
-	servAddr.sin_port = htons(PORT); // use some unused port number
-	servAddr.sin_addr.s_addr = inet_addr(argv[1]);
-
-	int connectStatus = connect(sock_control, (SOCKADDR*)&servAddr, sizeof(servAddr));
-
-	if (connectStatus == -1) {
-		printf("Error...\n");
-		exit(1);
-	}
-
-	// Get connection, welcome messages
-	printf("Connected to %s.\n", argv[1]);
-	print_reply(read_reply()); 
-	
-
-	/* Get name and password and send to server */
-	ftclient_login();
-
-	while (1) { // loop until user types quit
-
-		// Get a command from user
-		int cmd_stt = ftclient_read_command(user_input, sizeof(user_input), &cmd);
-		if ( cmd_stt == -1 ) {
-			printf("Invalid command\n");
-			continue;	// loop back for another command
-		} else if( cmd_stt == 0 ){
-
-			// Send command to server
-			if (send(sock_control, user_input, strlen(user_input), 0) < 0 ) {
-				close(sock_control);
-				exit(1);
-			}
-
-			retcode = read_reply();		
-			if (retcode == 221) {
-				/* If command was quit, just exit */
-				print_reply(221);
-				break;
-			}
-			
-			if (retcode == 502) {
-				// If invalid command, show error message
-				printf("%d Invalid command.\n", retcode);
-			} else {
-				
-			// Command is valid (RC = 200), process command
-			
-				// open data connection
-				if ((data_sock = ftclient_open_conn(sock_control)) < 0) {
-					perror("Error opening socket for data connection");
-					exit(1);
-				}
-				
-				// execute command
-				if (strcmp(cmd.code, "LIST") == 0) {
-					ftclient_list(data_sock, sock_control); 
-				} else if(strcmp(cmd.code, "CWD ") == 0) {
-					if(read_reply() == 250) {
-						print_reply(250);
-					} else {
-						printf("%s is not a directory\n", cmd.arg);
-					}
-				} else if(strcmp(cmd.code, "PWD ") == 0) {
-					if(read_reply() == 212) {
-						ftclient_list(data_sock, sock_control); // ham nay in mess tu server
-					}
-				}
-				else if (strcmp(cmd.code, "RETR") == 0) {
-					// wait for reply (is file valid)
-					if (read_reply() == 550) {
-						print_reply(550);		
-						close(data_sock);
-						continue; 
-					}
-					clock_t start = clock();
-					ftclient_get(data_sock, sock_control, cmd.arg);
-					clock_t end = clock();
-					double cpu_time = ((double)(end - start))/CLOCKS_PER_SEC;
-					print_reply(read_reply());
-					printf("Time taken %lf\n",cpu_time);
-				}
-				else if (strcmp(cmd.code, "STOR") == 0) {
-					printf("Uploading ...\n");
-					upload(data_sock,cmd.arg);
-					printf("xong\n");
-				}
-				close(data_sock);
-			}
-		}
-
-	} // loop back to get more user input
-
-	// Close the socket (control connection)
-	close(sock_control);
-	return 0;
 }

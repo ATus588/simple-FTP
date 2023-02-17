@@ -1,27 +1,4 @@
-#include <stdio.h>
-#include <dirent.h>
-#include <string.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <ctype.h>
-
-#define INVALID_SOCKET -1
-#define INVALID_IP -1
-#define MAX_SIZE 1024
-#define PORT 9000
-#define DEFAULT_PORT 3000
-typedef struct sockaddr_in SOCKADDR_IN;
-typedef struct sockaddr SOCKADDR;
+#include "FTP_Server.h"
 
 /**
  * Trim whiteshpace and line ending
@@ -351,9 +328,9 @@ int ftpServer_cwd(int sock_control, char* folderName)
  */
 void ftpServer_pwd(int sock_control, int sock_data)
 {
-	char curr_dir[MAX_SIZE -1], msgToClient[MAX_SIZE];
+	char curr_dir[MAX_SIZE -2], msgToClient[MAX_SIZE];
 	memset(curr_dir, 0, MAX_SIZE);
-	memset(msgToClient,0,MAX_SIZE);
+	memset(msgToClient,0, MAX_SIZE);
 
 	getcwd(curr_dir,sizeof(curr_dir));
 	sprintf(msgToClient,"%s\n",curr_dir);
@@ -480,43 +457,9 @@ void ftserve_process(int sock_control)
 			} else if (strcmp(cmd, "STOR") == 0) {		// RETRIEVE: get file
 				printf("Receving ...\n");
 				recvFile(sock_control,sock_data, arg);
-				printf("xong r ma\n");
 			}
-			printf("dong data connection\n");
 			// Close data connection
 			close(sock_data);
 		} 
 	}
-}
-
-
-int main(int argc, char const *argv[])
-{
-	int ListenSock, CtrlSock, pid;
-
-	if ((ListenSock = socket_create()) < 0 ) {
-		perror("Error creating socket");
-		exit(1);
-	}		
-	
-	while(1) {	// wait for client request
-
-		// create new socket for control connection
-		if ((CtrlSock = socket_accept(ListenSock))	< 0 )
-			break;			
-		
-		// create child process to do actual file transfer
-		if ((pid = fork()) < 0) { 
-			perror("Error forking child process");
-		} else if (pid == 0) { 
-			close(ListenSock);
-			ftserve_process(CtrlSock);
-			close(CtrlSock);
-			exit(0);
-		}
-		close(CtrlSock);
-	}
-
-	close(ListenSock);	
-	return 0;
 }
