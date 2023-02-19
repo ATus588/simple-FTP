@@ -1,1 +1,3 @@
-# SimpleFTP_server-client
+Run the server
+
+Run the client
